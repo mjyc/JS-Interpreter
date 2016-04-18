@@ -7,6 +7,15 @@
   <script src="../acorn.js"></script>
   <script src="../interpreter.js"></script>
   <script>
+    Interpreter.prototype.getGlobalScope = function() {
+      for (var i = this.stateStack.length - 1; i >= 0 ; i--) {
+        if (this.stateStack[i].scope) {
+          return this.stateStack[i].scope;
+        }
+      }
+      throw 'No scope found.';
+    };
+    var code;
     var myInterpreter;
     function initAlert(interpreter, scope) {
       var wrapper = function(text) {
@@ -29,10 +38,45 @@
       };
       interpreter.setProperty(scope, 'setOutput',
           interpreter.createNativeFunction(wrapper));
+
+      var wrapper = function(f1, f2) {
+        var code1 = code.substring(f1.node.start + 13, f1.node.end - 2);
+        var code2 = code.substring(f2.node.start + 13, f2.node.end - 2);
+        interp1 = new Interpreter(code1, initAlert);
+        interp2 = new Interpreter(code2, initAlert);
+
+        function nextStep(interp) {
+          if (interp.step()) {
+
+            // Copy global scope to local scope
+            if (interp.stateStack.length === 2 && interp.lastStepN_ !== interp.stateStack[1].n_) {
+              for (var key in myInterpreter.getGlobalScope().properties) {
+                interp.getGlobalScope().properties[key] = myInterpreter.getGlobalScope().properties[key];
+              }
+              interp.lastStepN_ = interp.stateStack[1].n_;
+            }
+            // Copy local scope to global scope
+            if (interp.stateStack.length === 1) {
+              for (var key in interp.getGlobalScope().properties) {
+                myInterpreter.getGlobalScope().properties[key] = interp.getGlobalScope().properties[key];
+              }
+            }
+
+            // Synchronized nextStep for testing purposes
+            nextStep(interp);
+          }
+        }
+        interp1.lastStepN_ = 0;
+        interp2.lastStepN_ = 0;
+        nextStep(interp1);
+        nextStep(interp2);
+      };
+      interpreter.setProperty(scope, 'join',
+        interpreter.createNativeFunction(wrapper));
     };
 
     function parseButton() {
-      var code = document.getElementById('code').value
+      code = document.getElementById('code').value;
       myInterpreter = new Interpreter(code, initAlert);
       disable('');
     }
@@ -106,9 +150,13 @@
   or click <em>Run</em> once.  Open your browser's console for errors.</p>
 
   <p><textarea id="code" style="height: 10em;">
-var data = JSON.parse(getInput());
-alert(Object.keys(data));
-setOutput(JSON.stringify(data));
+var A = 1;
+var B = 2;
+function test() {
+    join(function() { A = 5; alert(A); }, function() { alert(A); A = 6; });
+};
+test();
+alert(A);
 </textarea><br>
   <button onclick="parseButton()">Parse</button>
   <button onclick="stepButton()" id="stepButton" disabled="disabled">Step</button>
