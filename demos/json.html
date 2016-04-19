@@ -45,40 +45,42 @@
         interp1 = new Interpreter(code1, initAlert);
         interp2 = new Interpreter(code2, initAlert);
 
-        var runInterp = function(interp) {
-          return new Promise(function(resolve, reject) {
-
-            function nextStep(interp) {
-              if (interp.step()) {
-                // Copy global scope to local scope
-                if (interp.stateStack.length === 2 && interp.lastStepN_ !== interp.stateStack[1].n_) {
-                  for (var key in myInterpreter.getGlobalScope().properties) {
-                    interp.getGlobalScope().properties[key] = myInterpreter.getGlobalScope().properties[key];
-                  }
-                  interp.lastStepN_ = interp.stateStack[1].n_;
-                }
-                // Copy local scope to global scope
-                if (interp.stateStack.length === 1) {
-                  for (var key in interp.getGlobalScope().properties) {
-                    myInterpreter.getGlobalScope().properties[key] = interp.getGlobalScope().properties[key];
-                  }
-                }
-                // Synchronized nextStep for testing purposes
-                nextStep(interp);
+        function nextStep(interp) {
+          if (!interp.lastStepN_)
+            interp.lastStepN_ = 0;
+          if (interp.step()) {
+            // Copy global scope to local scope
+            if (interp.stateStack.length === 2 && interp.lastStepN_ !== interp.stateStack[1].n_) {
+              for (var key in myInterpreter.getGlobalScope().properties) {
+                interp.getGlobalScope().properties[key] = myInterpreter.getGlobalScope().properties[key];
+              }
+              interp.lastStepN_ = interp.stateStack[1].n_;
+            }
+            // Copy local scope to global scope
+            if (interp.stateStack.length === 1) {
+              for (var key in interp.getGlobalScope().properties) {
+                myInterpreter.getGlobalScope().properties[key] = interp.getGlobalScope().properties[key];
               }
             }
+            // Synchronized nextStep for testing purposes
+            nextStep(interp);
+          }
+          interp.lastStepN_ = undefined;
+        }
 
-            interp.lastStepN_ = 0;
+        function runInterp(interp) {
+          return new Promise(function(resolve, reject) {
             nextStep(interp);
             resolve(true);
           });
         }
 
         // use Meteor's wrapAsync
+        // use race for join
         Promise.all([runInterp(interp1), runInterp(interp2)]).then(function(results) {
           console.log(results);
-        }, function(err) {
-          console.error("Error: ", err);
+        }).catch(function(err) {
+          console.error("runInterp error: ", err);
         });
       };
       interpreter.setProperty(scope, 'join',
