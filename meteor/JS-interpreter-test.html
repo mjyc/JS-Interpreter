@@ -1,0 +1,28 @@
+<head>
+  <title>JS-interpreter-test</title>
+</head>
+
+<body>
+  <h1>JS-Interpreter Test</h1>
+
+  <p>This function is defined using <code>createAsyncFunction</code> during
+  initialization.  When called, the interpreter is paused until the callback
+  occurs.  During this paused state, <code>step</code> and <code>run</code>
+  will both do nothing, returning <code>true</code> to indicate that the program
+  still has code to execute.</p>
+
+  <p>Click <em>Parse</em>, then either click <em>Step</em> repeatedly,
+  or click <em>Run</em> once.  Open your browser's console for errors.</p>
+
+  <p>
+    <textarea id="code">
+A = 1;
+B = 2;
+wait_for_all([function() {  A = 2; alert(A);}, function() { alert(A); A = 3; }])
+alert(A);
+    </textarea><br>
+    <button onclick="parseButton()">Parse</button>
+    <button onclick="stepButton()" id="stepButton" disabled="disabled">Step</button>
+    <button onclick="runButton()" id="runButton" disabled="disabled">Run</button>
+  </p>
+</body>
