@@ -17,10 +17,8 @@
   <p>
     <textarea id="code">
 var A = 1;
-var B = 2;
-wait_for_all([function() { print("1:A=" + A); A = 2; }, function() { sleep(1); print("2:A=" + A); A = 3; }]);
-print("3:A=" + A);
-print("1:B=" + B);
+wait_for_all([function() { print("1:A=" + A); A = 2; }, function() { sleep(1); print("2:A=" + A); A = 3; }, function() { sleep(2); print("3:A=" + A); A = 4; }]);
+print("4:A=" + A);
     </textarea><br>
     <button class="runButton">Run</button>
   </p>

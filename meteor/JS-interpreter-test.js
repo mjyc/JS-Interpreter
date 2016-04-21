@@ -85,12 +85,13 @@ if (Meteor.isServer) {
             var branch = branches_obj.properties[i];
             branches.push(branch);
           }
-          var code0 = code.substring(branches[0].node.start + 13, branches[0].node.end - 2);
-          var code1 = code.substring(branches[1].node.start + 13, branches[1].node.end - 2);
-          var interp0 = new Interpreter(code0, initApi);
-          var interp1 = new Interpreter(code1, initApi);
-          interp0.parentInterpreter = self.interpreter;
-          interp1.parentInterpreter = self.interpreter;
+          var branchCode = [];
+          var branchInterpreters = [];
+          for (var i = 0; i < branches.length; i++) {
+            branchCode.push(code.substring(branches[i].node.start + 13, branches[i].node.end - 2));
+            branchInterpreters.push(new Interpreter(branchCode[i], initApi));
+            branchInterpreters[i].parentInterpreter = self.interpreter;
+          }
 
           function runThread(interp) {
             return new Promise(function(resolve, reject) {
@@ -106,7 +107,7 @@ if (Meteor.isServer) {
           }
 
           var runThreads = Meteor.wrapAsync(function(callback) {
-            Promise.all([runThread(interp0), runThread(interp1)]).then(function(results) {
+            Promise.all(branchInterpreters.map(runThread)).then(function(results) {
               console.log("runThreads results:", results);
               callback(null, null);
             }).catch(function(err) {
