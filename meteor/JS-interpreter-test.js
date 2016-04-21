@@ -37,6 +37,11 @@ if (Meteor.isServer) {
     };
     Interpreter.prototype.stepThread = function() {
       if (this.step() && this.stateStack.length > 0) {
+        for (var i = 0; i < this.stateStack.length; i++) {
+          console.log(this.stateStack[i], this.stateStack[i].node.type);
+        }
+        console.log('\n');
+
         if (this.parentInterpreter) {
           if (this.stateStack[0].node.type === 'ExpressionStatement' && !this.stateStack[0].done) {
             // Copy global scope to local scope
@@ -58,7 +63,8 @@ if (Meteor.isServer) {
     };
 
     var code;
-    var self = {};
+    var self = { interpreter: null };
+
     function initApi(interpreter, scope) {
       var wrapper = function(secs) {
         secs = secs ? secs.toNumber() * 1000: 0;
@@ -89,10 +95,10 @@ if (Meteor.isServer) {
         }
         return Meteor.wrapAsync(function(callback) {
           Promise.all(interpreters.map(runThread)).then(function(results) {
-            console.log("runThreads results:", results);
+            console.log("wait_for_all results:", results);
             callback(null, null);
           }).catch(function(err) {
-            console.error("runThreads error:", err);
+            console.error("wait_for_all error:", err);
             callback(null, null);
           });
         });
@@ -120,12 +126,12 @@ if (Meteor.isServer) {
     }
 
     Meteor.methods({
-      runCode: function (inputcode) {
-        code = inputcode;
+      runCode: function (inputCode) {
+        code = inputCode;
         self.interpreter = new Interpreter(code, initApi);
-        console.log("====STARTING PROGRAM====");
+        console.log("====PROGRAM START====");
         self.interpreter.run();
-        console.log("====PROGRAM ENDED====");
+        console.log("====PROGRAM END====");
       }
     });
 

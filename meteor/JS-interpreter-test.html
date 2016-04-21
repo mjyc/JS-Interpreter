@@ -5,20 +5,25 @@
 <body>
   <h1>JS-Interpreter Test</h1>
 
-  <p>This function is defined using <code>createAsyncFunction</code> during
-  initialization.  When called, the interpreter is paused until the callback
-  occurs.  During this paused state, <code>step</code> and <code>run</code>
-  will both do nothing, returning <code>true</code> to indicate that the program
-  still has code to execute.</p>
-
-  <p>Click <em>Parse</em>, then either click <em>Step</em> repeatedly,
-  or click <em>Run</em> once.  Open your browser's console for errors.</p>
+  <p>Click <em>Run</em> and check your terminal running the Meteor server for the program outputs.</p>
 
   <p>
     <textarea id="code">
+// Capturing variable test 1
 var A = 1;
-wait_for_all([function() { print("1:A=" + A); A = 2; }, function() { sleep(1); print("2:A=" + A); A = 3; }, function() { sleep(2); print("3:A=" + A); A = 4; }]);
-print("4:A=" + A);
+wait_for_all([function() {
+    print("A = " + A + " // 1");
+    A = 2;
+}, function() {
+    sleep(1);
+    print("A=" + A + " // 2");
+    A = 3;
+}, function() {
+    sleep(2);
+    print("A = " + A + " // 3");
+    A = 4;
+}]);
+print("A = " + A + " // 4");
     </textarea><br>
     <button class="runButton">Run</button>
   </p>
