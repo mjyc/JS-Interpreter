@@ -52,6 +52,10 @@ Interpreter.prototype.step = function() {
   }
   var state = this.stateStack[0];
   this['step' + state.node.type]();
+  for (var i = 0; i < this.stateStack.length; i++) {
+    console.log(this.stateStack[i]);
+  }
+  console.log('\n');
   return true;
 };
 

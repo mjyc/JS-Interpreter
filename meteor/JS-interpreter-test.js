@@ -37,23 +37,66 @@ if (Meteor.isServer) {
     };
     Interpreter.prototype.stepThread = function() {
       if (this.step() && this.stateStack.length > 0) {
-        for (var i = 0; i < this.stateStack.length; i++) {
-          console.log(this.stateStack[i], this.stateStack[i].node.type);
-        }
-        console.log('\n');
-
         if (this.parentInterpreter) {
           if (this.stateStack[0].node.type === 'ExpressionStatement' && !this.stateStack[0].done) {
-            // Copy global scope to local scope
-            for (var key in this.parentInterpreter.getGlobalScope().properties) {
-              this.getGlobalScope().properties[key] = this.parentInterpreter.getGlobalScope().properties[key];
+            if (this.getScope() !== this.getGlobalScope()) {
+              console.log('this.getScope() !== this.getGlobalScope()');
+              var stopwords = [];
+              for (var key in this.getScope().properties) {
+                stopwords.push(key);
+              }
+              // console.log(stopwords);
+              // Copy global scope to local scope
+              for (var name in this.parentInterpreter.getScope().properties) {
+                if (stopwords.indexOf(name) < 0) {
+                  // console.log("local", name);
+                  this.getScope().properties[name] = this.parentInterpreter.getScope().properties[name];
+                }
+              }
+              for (var name in this.parentInterpreter.getGlobalScope().properties) {
+                if (stopwords.indexOf(name) < 0) {
+                  if (!(name in this.getScope().properties))
+                    // console.log("global", name);
+                    this.getScope().properties[name] = this.parentInterpreter.getGlobalScope().properties[name];
+                }
+              }
+
+            } else {
+              console.log('this.getScope() === this.getGlobalScope()');
+
+              // if (this.parentInterpreter.getScope() !== this.parentInterpreter.getGlobalScope()) {
+                // Copy global scope to local scope
+                for (var key in this.parentInterpreter.getScope().properties) {
+                  try {
+                    console.log('parent', this.parentInterpreter.level, key, this.parentInterpreter.getScope().properties[key].data);
+                  } catch (e) {
+                    console.log(e);
+                  }
+                }
+                for (var name in this.parentInterpreter.getScope().properties) {
+                  this.getScope().properties[name] = this.parentInterpreter.getScope().properties[name];
+                }
+                for (var name in this.parentInterpreter.getGlobalScope().properties) {
+                  if (!(name in this.getScope().properties))
+                    this.getScope().properties[name] = this.parentInterpreter.getGlobalScope().properties[name];
+                }
+              // }
+
             }
+
           } else if (this.stateStack[0].node.type === 'AssignmentExpression' &&
                      this.stateStack[0].doneLeft &&
                      this.stateStack[0].doneRight) {
             // Copy local scope to global scope
             // Assumes variable declaration is done only in global scope
-            this.parentInterpreter.getGlobalScope().properties[this.stateStack[0].leftSide.data] = this.stateStack[0].value;
+            if (this.getScope() === this.getGlobalScope()) {
+              this.parentInterpreter.getScope().properties[this.stateStack[0].leftSide.data] = this.stateStack[0].value;
+            } else {
+              if (!(this.stateStack[0].leftSide.data in this.getScope().properties)) {
+                this.parentInterpreter.getScope().properties[this.stateStack[0].leftSide.data] = this.stateStack[0].value;
+              }
+            }
+
           }
         }
         return true;
@@ -64,6 +107,7 @@ if (Meteor.isServer) {
 
     var code;
     var self = { interpreter: null };
+    var cnt = 0;
 
     function initApi(interpreter, scope) {
       var wrapper = function(secs) {
@@ -118,8 +162,10 @@ if (Meteor.isServer) {
             branches.push(branch);
             branchCode.push(code.substring(branches[i].node.start + 12, branches[i].node.end - 3));
             branchInterpreters.push(new Interpreter(branchCode[i], initApi));
-            branchInterpreters[i].parentInterpreter = self.interpreter;
+            interpreter.level = cnt;
+            branchInterpreters[i].parentInterpreter = interpreter;
           }
+          cnt++;
           return interpreter.createPrimitive(createThreads(branchInterpreters)());
         }
       ));

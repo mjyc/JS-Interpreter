@@ -9,21 +9,30 @@
 
   <p>
     <textarea id="code">
-// Capturing variable test 1
-var A = 1;
-wait_for_all([function() {
-    print("A = " + A + " // 1");
-    A = 2;
-}, function() {
-    sleep(1);
-    print("A=" + A + " // 2");
-    A = 3;
-}, function() {
-    sleep(2);
-    print("A = " + A + " // 3");
-    A = 4;
-}]);
-print("A = " + A + " // 4");
+// Capturing variable test 4
+var a = 1;
+var set_a_to_2 = function(a) {
+    a = 2;
+    print("0.5a = " + a + " // 2");
+    wait_for_all([function() {
+        print("1a = " + a + " // 2");
+        a = 3;
+    }, function() {
+        sleep(0.5);
+        print("2a = " + a + " // 3");
+    }]);
+};
+var test = function(a) {
+    wait_for_all([function() {
+        set_a_to_2(a);
+        print("3a = " + a + " // 1");
+    }]);
+    print("4a = " + a + " // 1");
+    a = 4;
+};
+test(a);
+print("5a = " + a + " // 1");
+
     </textarea><br>
     <button class="runButton">Run</button>
   </p>

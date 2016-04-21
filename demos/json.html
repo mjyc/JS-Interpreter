@@ -21,15 +21,15 @@
         if (this.parentInterpreter) {
           if (this.stateStack[0].node.type === 'ExpressionStatement' && !this.stateStack[0].done) {
             // Copy global scope to local scope
-            for (var key in this.parentInterpreter.getGlobalScope().properties) {
-              this.getGlobalScope().properties[key] = this.parentInterpreter.getGlobalScope().properties[key];
+            for (var name in this.parentInterpreter.getScope().properties) {
+              this.setValueToScope(name, this.parentInterpreter.getValueFromScope(name));
             }
           } else if (this.stateStack[0].node.type === 'AssignmentExpression' &&
                      this.stateStack[0].doneLeft &&
                      this.stateStack[0].doneRight) {
             // Copy local scope to global scope
             // Assumes variable declaration is done only in global scope
-            this.parentInterpreter.getGlobalScope().properties[this.stateStack[0].leftSide.data] = this.stateStack[0].value;
+            this.parentInterpreter.setValueToScope(this.stateStack[0].leftSide.data, this.stateStack[0].value);
           }
         }
         return true;
@@ -190,7 +190,7 @@ var set_a_to_2 = function(a) {
 // set_a_to_2();
 // print("a = " + a + " // 1");
 wait_for_all([function() {
-    set_a_to_2(a);
+    // set_a_to_2(a);
     print("a = " + a + " // 1");
 }]);
 print("a = " + a + " // 1");
