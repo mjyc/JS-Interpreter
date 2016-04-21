@@ -109,13 +109,13 @@
 
     function parseButton() {
       code = document.getElementById('code').value;
-      this.interpreter = new Interpreter(code, initApi);
+      self.interpreter = new Interpreter(code, initApi);
       disable('');
     }
 
     function stepButton() {
-      if (this.interpreter.stateStack[0]) {
-        var node = this.interpreter.stateStack[0].node;
+      if (self.interpreter.stateStack[0]) {
+        var node = self.interpreter.stateStack[0].node;
         var start = node.start;
         var end = node.end;
       } else {
@@ -124,7 +124,7 @@
       }
       createSelection(start, end);
       try {
-        var ok = this.interpreter.step();
+        var ok = self.interpreter.step();
       } finally {
         if (!ok) {
           disable('disabled');
@@ -134,7 +134,7 @@
 
     function runButton() {
       disable('disabled');
-      this.interpreter.run()
+      self.interpreter.run()
     }
 
     function disable(disabled) {
