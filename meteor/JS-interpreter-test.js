@@ -74,6 +74,30 @@ if (Meteor.isServer) {
       interpreter.setProperty(scope, 'print',
           interpreter.createNativeFunction(wrapper));
 
+      function createThreads(interpreters) {
+        function runThread(interp) {
+          return new Promise(function(resolve, reject) {
+            function nextStep() {
+              if (interp.stepThread()) {
+                Meteor.setTimeout(nextStep, 0);
+              } else {
+                resolve(true);
+              }
+            }
+            nextStep(interp);
+          });
+        }
+        return Meteor.wrapAsync(function(callback) {
+          Promise.all(interpreters.map(runThread)).then(function(results) {
+            console.log("runThreads results:", results);
+            callback(null, null);
+          }).catch(function(err) {
+            console.error("runThreads error:", err);
+            callback(null, null);
+          });
+        });
+      }
+
       interpreter.setProperty(scope, 'wait_for_all', interpreter.createNativeFunction(
         function(branches_obj) {
           // self.mostRecentPrimitive = {
@@ -81,41 +105,16 @@ if (Meteor.isServer) {
           //   args: []
           // };
           var branches = [];
+          var branchCode = [];
+          var branchInterpreters = [];
           for (var i = 0; i < branches_obj.length; i++) {
             var branch = branches_obj.properties[i];
             branches.push(branch);
-          }
-          var branchCode = [];
-          var branchInterpreters = [];
-          for (var i = 0; i < branches.length; i++) {
-            branchCode.push(code.substring(branches[i].node.start + 13, branches[i].node.end - 2));
+            branchCode.push(code.substring(branches[i].node.start + 12, branches[i].node.end - 3));
             branchInterpreters.push(new Interpreter(branchCode[i], initApi));
             branchInterpreters[i].parentInterpreter = self.interpreter;
           }
-
-          function runThread(interp) {
-            return new Promise(function(resolve, reject) {
-              function nextStep() {
-                if (interp.stepThread()) {
-                  Meteor.setTimeout(nextStep, 0);
-                } else {
-                  resolve(true);
-                }
-              }
-              nextStep(interp);
-            });
-          }
-
-          var runThreads = Meteor.wrapAsync(function(callback) {
-            Promise.all(branchInterpreters.map(runThread)).then(function(results) {
-              console.log("runThreads results:", results);
-              callback(null, null);
-            }).catch(function(err) {
-              console.error("runThreads error:", err);
-              callback(null, null);
-            });
-          });
-          return interpreter.createPrimitive(runThreads());
+          return interpreter.createPrimitive(createThreads(branchInterpreters)());
         }
       ));
     }
