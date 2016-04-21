@@ -15,6 +15,14 @@ if (Meteor.isClient) {
 
 }
 
+if (Meteor.isClient) {
+  Template.body.events({
+    "click .runButton": function () {
+      Meteor.call("runCode", document.getElementById('code').value);
+    }
+  });
+}
+
 if (Meteor.isServer) {
 
   Meteor.startup(function () {
@@ -27,19 +35,21 @@ if (Meteor.isServer) {
       }
       throw 'No scope found.';
     };
-    Interpreter.prototype.stepThread = function(parentInterpreter) {
+    Interpreter.prototype.stepThread = function() {
       if (this.step() && this.stateStack.length > 0) {
-        if (this.stateStack[0].node.type === 'ExpressionStatement' && !this.stateStack[0].done) {
-          // Copy global scope to local scope
-          for (var key in parentInterpreter.getGlobalScope().properties) {
-            this.getGlobalScope().properties[key] = parentInterpreter.getGlobalScope().properties[key];
+        if (this.parentInterpreter) {
+          if (this.stateStack[0].node.type === 'ExpressionStatement' && !this.stateStack[0].done) {
+            // Copy global scope to local scope
+            for (var key in this.parentInterpreter.getGlobalScope().properties) {
+              this.getGlobalScope().properties[key] = this.parentInterpreter.getGlobalScope().properties[key];
+            }
+          } else if (this.stateStack[0].node.type === 'AssignmentExpression' &&
+                     this.stateStack[0].doneLeft &&
+                     this.stateStack[0].doneRight) {
+            // Copy local scope to global scope
+            // Assumes variable declaration is done only in global scope
+            this.parentInterpreter.getGlobalScope().properties[this.stateStack[0].leftSide.data] = this.stateStack[0].value;
           }
-        } else if (this.stateStack[0].node.type === 'AssignmentExpression' &&
-                   this.stateStack[0].doneLeft &&
-                   this.stateStack[0].doneRight) {
-          // Copy local scope to global scope
-          // Assumes variable declaration is done only in global scope
-          parentInterpreter.getGlobalScope().properties[this.stateStack[0].leftSide.data] = this.stateStack[0].value;
         }
         return true;
       } else {
@@ -47,9 +57,16 @@ if (Meteor.isServer) {
       }
     };
 
-    var code = "var A = 1; print(A);\n";
+    var code;
     var self = {};
     function initApi(interpreter, scope) {
+      var wrapper = function(secs) {
+        secs = secs ? secs.toNumber() * 1000: 0;
+        return interpreter.createPrimitive(Meteor._sleepForMs(secs));
+      };
+      interpreter.setProperty(scope, 'sleep',
+          interpreter.createNativeFunction(wrapper));
+
       var wrapper = function(text) {
         text = text ? text.toString() : '';
         return interpreter.createPrimitive(console.log(text));
@@ -72,11 +89,13 @@ if (Meteor.isServer) {
           var code1 = code.substring(branches[1].node.start + 13, branches[1].node.end - 2);
           var interp0 = new Interpreter(code0, initApi);
           var interp1 = new Interpreter(code1, initApi);
+          interp0.parentInterpreter = self.interpreter;
+          interp1.parentInterpreter = self.interpreter;
 
           function runThread(interp) {
             return new Promise(function(resolve, reject) {
               function nextStep() {
-                if (interp.stepThread(self.interpreter)) {
+                if (interp.stepThread()) {
                   Meteor.setTimeout(nextStep, 0);
                 } else {
                   resolve(true);
@@ -95,15 +114,21 @@ if (Meteor.isServer) {
               callback(null, null);
             });
           });
-          runThreads();
-          console.log('Done!', self.interpreter.stateStack.length);
-          return interpreter.createPrimitive(true);
+          return interpreter.createPrimitive(runThreads());
         }
       ));
-    };
+    }
 
-    self.interpreter = new Interpreter(code, initApi);
-    self.interpreter.run();
+    Meteor.methods({
+      runCode: function (inputcode) {
+        code = inputcode;
+        self.interpreter = new Interpreter(code, initApi);
+        console.log("====STARTING PROGRAM====");
+        self.interpreter.run();
+        console.log("====PROGRAM ENDED====");
+      }
+    });
+
   });
 
 }
