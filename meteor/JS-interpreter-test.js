@@ -28,6 +28,21 @@ if (Meteor.isServer) {
   Meteor.startup(function () {
 
     var self = { interpreter: null };
+    class ParallelInterpreter extends Interpreter {
+      constructor(code, parentInterpreter, opt_initFunc) {
+        super(code, opt_initFunc);
+        this.code = code;
+        this.parentInterpreter = parentInterpreter;
+        this.finalScope = null;
+      }
+      step() {
+        const ret = super.step();
+        if (this.stateStack.length === 1) {  // right before the last step
+          this.finalScope = this.getScope();
+        }
+        return ret;
+      }
+    }
 
     function initApi(interpreter, scope) {
       var wrapper = function(secs) {
@@ -46,11 +61,11 @@ if (Meteor.isServer) {
 
       function createThreads(interpreters) {
         function runThread(interp) {
-          return new Promise(function(resolve, reject) {
-            var parentScope = interp.parentInterpreter.getScope();
+          return new Promise((resolve, reject) => {
+            let parentScope = interp.parentInterpreter.getScope();
             // Copy the parent scope to the thread scope
             while (parentScope) {
-              for (var name in parentScope.properties) {
+              for (let name in parentScope.properties) {
                 if (!(name in interp.getScope().properties)) {
                   interp.getScope().properties[name] = parentScope.properties[name];
                 }
@@ -58,13 +73,9 @@ if (Meteor.isServer) {
               parentScope = parentScope.parentScope;
             }
             // Save the final thread scope
-            interp.finalScope = null;
             function nextStep() {
               try {
                 if (interp.step()) {
-                  if (interp.stateStack.length === 1) {  // right before the last step
-                    interp.finalScope = interp.getScope();
-                  }
                   Meteor.setTimeout(nextStep, 0);
                 } else {
                   resolve(true);
@@ -77,16 +88,16 @@ if (Meteor.isServer) {
           });
         }
         return Meteor.wrapAsync(function(callback) {
-          Promise.all(interpreters.map(runThread)).then(function(results) {
-            console.log("wait_for_all results:", results);
-            for (var i = 0; i < interpreters.length; i++) {
-              for (var name in interpreters[i].finalScope.properties) {
+          Promise.all(interpreters.map(runThread)).then(results => {
+            console.log(`wait_for_all results: ${results}`);
+            for (let i = 0; i < interpreters.length; i++) {
+              for (let name in interpreters[i].finalScope.properties) {
                 interpreters[i].parentInterpreter.setValueToScope(name, interpreters[i].finalScope.properties[name]);
               }
             }
             callback(null, null);
-          }).catch(function(err) {
-            console.error("wait_for_all error:", err);
+          }).catch(err => {
+            console.error(`wait_for_all error: ${err}`);
             callback(null, null);
           });
         });
@@ -98,16 +109,14 @@ if (Meteor.isServer) {
           //   name: 'endProgram',
           //   args: []
           // };
-          var branches = [];
-          var branchCode = [];
-          var branchInterpreters = [];
-          for (var i = 0; i < branches_obj.length; i++) {
-            var branch = branches_obj.properties[i];
+          let branches = [];
+          let branchCode = [];
+          let branchInterpreters = [];
+          for (let i = 0; i < branches_obj.length; i++) {
+            let branch = branches_obj.properties[i];
             branches.push(branch);
             branchCode.push(interpreter.code.substring(branches[i].node.start + 12, branches[i].node.end - 1));
-            branchInterpreters.push(new Interpreter(branchCode[i], initApi));
-            branchInterpreters[i].code = branchCode[i];
-            branchInterpreters[i].parentInterpreter = interpreter;
+            branchInterpreters.push(new ParallelInterpreter(branchCode[i], interpreter, initApi));
           }
           createThreads(branchInterpreters)();
           return interpreter.createPrimitive(true);
