@@ -32,16 +32,88 @@ if (Meteor.isServer) {
       constructor(code, parentInterpreter, opt_initFunc) {
         super(code, opt_initFunc);
         this.code = code;
-        this.parentInterpreter = parentInterpreter;
-        this.finalScope = null;
+        this._parentInterpreter = parentInterpreter;
+        this._finalScope = undefined;
+        this._stopped = false;
+        // Copy the parent scope to the thread scope
+        let parentScope = this._parentInterpreter.getScope();
+        while (parentScope) {
+          for (let name in parentScope.properties) {
+            if (!(name in super.getScope().properties)) {
+              super.getScope().properties[name] = parentScope.properties[name];
+            }
+          }
+          parentScope = parentScope.parentScope;
+        }
+      }
+      copyFinalScopeToParentScope() {
+        // Check if this interpreter is at the end
+        if (this.isFinished()) {
+          for (let name in this._finalScope.properties) {
+            this._parentInterpreter.setValueToScope(name, this._finalScope.properties[name]);
+          }
+          return true;
+        } else {
+          return false;
+        }
       }
       step() {
+        if (this._stopped)
+          return false;
         const ret = super.step();
         if (this.stateStack.length === 1) {  // right before the last step
-          this.finalScope = this.getScope();
+          this._finalScope = super.getScope();
         }
         return ret;
       }
+      runAsync() {
+        return new Promise((resolve, reject) => {
+          const self = this;
+          function nextStep() {
+            try {
+              if (self.step()) {
+                Meteor.setTimeout(nextStep, 0);
+              } else {
+                if (self.isFinished())
+                  resolve(true);  // executed all instructions
+                else
+                  resolve(false);  // stopped?
+              }
+            } catch (e) {
+              reject(e);
+            }
+          }
+          nextStep();
+        });
+      }
+      stopAsync() {
+        this._stopped = true;
+      }
+      isFinished() {
+        return this._finalScope && this.stateStack.length === 0;
+      }
+    }
+
+    function createThreads(interpreters, race = false) {
+
+      return Meteor.wrapAsync(function(callback) {
+        Promise.all(interpreters.map(interp => interp.runAsync())).then(results => {
+          console.log(`wait_for_all results: ${results}`);
+          // copy the scope of current one
+          // stop everything except current one
+          //   distinguish finished one by stop is not being used but finished
+          // if there are more than one finished, error.
+          for (let i = 0; i < results.length; i++) {
+            if (!interpreters[i].copyFinalScopeToParentScope()) {
+              return Promise.reject('Failed to copy final scope to parent scope');
+            }
+          }
+          callback(null, true);
+        }).catch(err => {
+          console.error(`wait_for_all error: ${err}`);
+          callback(null, false);
+        });
+      });
     }
 
     function initApi(interpreter, scope) {
@@ -58,50 +130,6 @@ if (Meteor.isServer) {
       };
       interpreter.setProperty(scope, 'print',
           interpreter.createNativeFunction(wrapper));
-
-      function createThreads(interpreters) {
-        function runThread(interp) {
-          return new Promise((resolve, reject) => {
-            let parentScope = interp.parentInterpreter.getScope();
-            // Copy the parent scope to the thread scope
-            while (parentScope) {
-              for (let name in parentScope.properties) {
-                if (!(name in interp.getScope().properties)) {
-                  interp.getScope().properties[name] = parentScope.properties[name];
-                }
-              }
-              parentScope = parentScope.parentScope;
-            }
-            // Save the final thread scope
-            function nextStep() {
-              try {
-                if (interp.step()) {
-                  Meteor.setTimeout(nextStep, 0);
-                } else {
-                  resolve(true);
-                }
-              } catch (e) {
-                reject(e);
-              }
-            }
-            nextStep(interp);
-          });
-        }
-        return Meteor.wrapAsync(function(callback) {
-          Promise.all(interpreters.map(runThread)).then(results => {
-            console.log(`wait_for_all results: ${results}`);
-            for (let i = 0; i < interpreters.length; i++) {
-              for (let name in interpreters[i].finalScope.properties) {
-                interpreters[i].parentInterpreter.setValueToScope(name, interpreters[i].finalScope.properties[name]);
-              }
-            }
-            callback(null, null);
-          }).catch(err => {
-            console.error(`wait_for_all error: ${err}`);
-            callback(null, null);
-          });
-        });
-      }
 
       interpreter.setProperty(scope, 'wait_for_all', interpreter.createNativeFunction(
         function(branches_obj) {
