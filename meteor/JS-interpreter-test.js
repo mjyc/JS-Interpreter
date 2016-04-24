@@ -74,10 +74,7 @@ if (Meteor.isServer) {
               if (self.step()) {
                 Meteor.setTimeout(nextStep, 0);
               } else {
-                if (self.isFinished())
-                  resolve(true);  // executed all instructions
-                else
-                  resolve(false);  // stopped?
+                resolve(self);
               }
             } catch (e) {
               reject(e);
@@ -95,24 +92,33 @@ if (Meteor.isServer) {
     }
 
     function createThreads(interpreters, race = false) {
-
       return Meteor.wrapAsync(function(callback) {
-        Promise.all(interpreters.map(interp => interp.runAsync())).then(results => {
-          console.log(`wait_for_all results: ${results}`);
-          // copy the scope of current one
-          // stop everything except current one
-          //   distinguish finished one by stop is not being used but finished
-          // if there are more than one finished, error.
-          for (let i = 0; i < results.length; i++) {
-            if (!interpreters[i].copyFinalScopeToParentScope()) {
+        if (!race) {
+          Promise.all(interpreters.map(interp => interp.runAsync())).then(results => {
+            for (let i = 0; i < results.length; i++) {
+              if (!results[i].copyFinalScopeToParentScope()) {
+                return Promise.reject('Failed to copy final scope to parent scope');
+              }
+            }
+            console.error(`wait_for_all done`);
+            callback(null, true);
+          }).catch(err => {
+            console.error(`wait_for_all error: ${err}`);
+            callback(null, false);
+          });
+        } else {
+          Promise.race(interpreters.map(interp => interp.runAsync())).then(result => {
+            interpreters.map(interp => interp.stopAsync());
+            if (!result.copyFinalScopeToParentScope()) {
               return Promise.reject('Failed to copy final scope to parent scope');
             }
-          }
-          callback(null, true);
-        }).catch(err => {
-          console.error(`wait_for_all error: ${err}`);
-          callback(null, false);
-        });
+            console.error(`wait_for_one done`);
+            callback(null, true);
+          }).catch(err => {
+            console.error(`wait_for_one error: ${err}`);
+            callback(null, false);
+          });
+        }
       });
     }
 
@@ -147,6 +153,26 @@ if (Meteor.isServer) {
             branchInterpreters.push(new ParallelInterpreter(branchCode[i], interpreter, initApi));
           }
           createThreads(branchInterpreters)();
+          return interpreter.createPrimitive(true);
+        }
+      ));
+
+      interpreter.setProperty(scope, 'wait_for_one', interpreter.createNativeFunction(
+        function(branches_obj) {
+          // self.mostRecentPrimitive = {
+          //   name: 'endProgram',
+          //   args: []
+          // };
+          let branches = [];
+          let branchCode = [];
+          let branchInterpreters = [];
+          for (let i = 0; i < branches_obj.length; i++) {
+            let branch = branches_obj.properties[i];
+            branches.push(branch);
+            branchCode.push(interpreter.code.substring(branches[i].node.start + 12, branches[i].node.end - 1));
+            branchInterpreters.push(new ParallelInterpreter(branchCode[i], interpreter, initApi));
+          }
+          createThreads(branchInterpreters, true)();
           return interpreter.createPrimitive(true);
         }
       ));
