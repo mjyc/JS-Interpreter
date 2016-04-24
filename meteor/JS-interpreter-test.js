@@ -91,37 +91,6 @@ if (Meteor.isServer) {
       }
     }
 
-    function createThreads(interpreters, race = false) {
-      return Meteor.wrapAsync(function(callback) {
-        if (!race) {
-          Promise.all(interpreters.map(interp => interp.runAsync())).then(results => {
-            for (let i = 0; i < results.length; i++) {
-              if (!results[i].copyFinalScopeToParentScope()) {
-                return Promise.reject('Failed to copy final scope to parent scope');
-              }
-            }
-            console.error(`wait_for_all done`);
-            callback(null, true);
-          }).catch(err => {
-            console.error(`wait_for_all error: ${err}`);
-            callback(null, false);
-          });
-        } else {
-          Promise.race(interpreters.map(interp => interp.runAsync())).then(result => {
-            interpreters.map(interp => interp.stopAsync());
-            if (!result.copyFinalScopeToParentScope()) {
-              return Promise.reject('Failed to copy final scope to parent scope');
-            }
-            console.error(`wait_for_one done`);
-            callback(null, true);
-          }).catch(err => {
-            console.error(`wait_for_one error: ${err}`);
-            callback(null, false);
-          });
-        }
-      });
-    }
-
     function initApi(interpreter, scope) {
       var wrapper = function(secs) {
         secs = secs ? secs.toNumber() * 1000: 0;
@@ -152,8 +121,20 @@ if (Meteor.isServer) {
             branchCode.push(interpreter.code.substring(branches[i].node.start + 12, branches[i].node.end - 1));
             branchInterpreters.push(new ParallelInterpreter(branchCode[i], interpreter, initApi));
           }
-          createThreads(branchInterpreters)();
-          return interpreter.createPrimitive(true);
+          return Meteor.wrapAsync(callback => {
+            Promise.all(branchInterpreters.map(interp => interp.runAsync())).then(results => {
+              for (let i = 0; i < results.length; i++) {
+                if (!results[i].copyFinalScopeToParentScope()) {
+                  return Promise.reject('Failed to copy final scope to parent scope');
+                }
+              }
+              console.error(`wait_for_all done`);
+              callback(null, true);
+            }).catch(err => {
+              console.error(`wait_for_all error: ${err}`);
+              callback(null, false);
+            });
+          })();
         }
       ));
 
@@ -172,8 +153,19 @@ if (Meteor.isServer) {
             branchCode.push(interpreter.code.substring(branches[i].node.start + 12, branches[i].node.end - 1));
             branchInterpreters.push(new ParallelInterpreter(branchCode[i], interpreter, initApi));
           }
-          createThreads(branchInterpreters, true)();
-          return interpreter.createPrimitive(true);
+          return Meteor.wrapAsync(callback => {
+            Promise.race(branchInterpreters.map(interp => interp.runAsync())).then(result => {
+              branchInterpreters.map(interp => interp.stopAsync());
+              if (!result.copyFinalScopeToParentScope()) {
+                return Promise.reject('Failed to copy final scope to parent scope');
+              }
+              console.error(`wait_for_one done`);
+              callback(null, true);
+            }).catch(err => {
+              console.error(`wait_for_one error: ${err}`);
+              callback(null, false);
+            });
+          })();
         }
       ));
     }
