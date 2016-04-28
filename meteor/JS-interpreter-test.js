@@ -33,6 +33,7 @@ if (Meteor.isServer) {
         super(code, opt_initFunc);
         this.code = code;
         this._parentInterpreter = parentInterpreter;
+        this._initScopeProperties = {};
         this._finalScope = undefined;
         this._stopped = false;
         // Copy the parent scope to the thread scope
@@ -41,6 +42,7 @@ if (Meteor.isServer) {
           for (let name in parentScope.properties) {
             if (!(name in super.getScope().properties)) {
               super.getScope().properties[name] = parentScope.properties[name];
+              this._initScopeProperties[name] = parentScope.properties[name];
             }
           }
           parentScope = parentScope.parentScope;
@@ -50,6 +52,10 @@ if (Meteor.isServer) {
         // Check if this interpreter is at the end
         if (this.isFinished()) {
           for (let name in this._finalScope.properties) {
+            if (this._initScopeProperties.hasOwnProperty(name) &&
+                this._initScopeProperties[name] === this._finalScope.properties[name]) {
+              continue;  // Don't change since the variable "name" wasn't updated
+            }
             this._parentInterpreter.setValueToScope(name, this._finalScope.properties[name]);
           }
           return true;
