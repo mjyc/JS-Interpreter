@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>JS-Interpreter JSON Demo</title>
+  <link href="style.css" rel="stylesheet" type="text/css">
+  <script src="../acorn.js"></script>
+  <script src="../interpreter.js"></script>
+  <script>
+    var myInterpreter;
+    function initApi(interpreter, scope) {
+      var myConsole = interpreter.createObject(interpreter.OBJECT);
+      interpreter.setProperty(scope, 'console', myConsole);
+      var wrapper = function(text) {
+        return console.log(arguments.length ? text : '');
+      };
+      interpreter.setProperty(myConsole, 'log',
+        interpreter.createNativeFunction(wrapper));
+      wrapper = function(fnc, timeout) {
+        console.log('fnc:', fnc, 'timeout', timeout);
+        setTimeout(fnc, timeout);
+      };
+      interpreter.setProperty(scope, 'setTimeout',
+        interpreter.createNativeFunction(wrapper));
+    }
+
+    function parseButton() {
+      var code = document.getElementById('code').value;
+      myInterpreter = new Interpreter(code, initApi);
+      disable('');
+    }
+
+    function stepButton() {
+      if (myInterpreter.stateStack.length) {
+        var node =
+            myInterpreter.stateStack[myInterpreter.stateStack.length - 1].node;
+        var start = node.start;
+        var end = node.end;
+      } else {
+        var start = 0;
+        var end = 0;
+      }
+      createSelection(start, end);
+      try {
+        var ok = myInterpreter.step();
+      } finally {
+        if (!ok) {
+          disable('disabled');
+        }
+      }
+    }
+
+    function runButton() {
+      disable('disabled');
+      myInterpreter.run();
+    }
+
+    function disable(disabled) {
+      document.getElementById('stepButton').disabled = disabled;
+      document.getElementById('runButton').disabled = disabled;
+    }
+
+    function createSelection(start, end) {
+      var field = document.getElementById('code');
+      if (field.createTextRange) {
+        var selRange = field.createTextRange();
+        selRange.collapse(true);
+        selRange.moveStart('character', start);
+        selRange.moveEnd('character', end);
+        selRange.select();
+      } else if (field.setSelectionRange) {
+        field.setSelectionRange(start, end);
+      } else if (field.selectionStart) {
+        field.selectionStart = start;
+        field.selectionEnd = end;
+      }
+      field.focus();
+    }
+  </script>
+</head>
+<body>
+  <h1>JS-Interpreter setTimeout Test</h1>
+
+  <p><textarea id="code" style="height: 10em;">
+var points = [40, 100, 1, 5, 25, 10];
+points.sort(function(a, b){return a - b});
+points.map(function(point) {
+  console.log(point);
+});
+
+setTimeout(function() {
+  console.log('2');
+}, 100);
+console.log('1');
+</textarea><br>
+  <button onclick="parseButton()">Parse</button>
+  <button onclick="stepButton()" id="stepButton" disabled="disabled">Step</button>
+  <button onclick="runButton()" id="runButton" disabled="disabled">Run</button>
+  </p>
+
+  <p>Back to the <a href="../docs.html">JS-Interpreter documentation</a>.</p>
+
+  <script>
+    disable('disabled');
+  </script>
+</body>
+</html>
